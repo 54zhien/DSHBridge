@@ -49,7 +49,7 @@ final class AuthStore {
     func loadProviders() async {
         guard let baseUrl else { phase = .failed("服务器地址不合法"); return }
         do {
-            providers = try await AuthClient(baseUrl: baseUrl).oauthProviders()
+            providers = try await AuthClient(baseUrl: baseUrl).oauthProviders().filter { $0.id != "zhihu" }
         } catch {
             phase = .failed(Self.describe(error))
         }

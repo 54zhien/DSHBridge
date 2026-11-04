@@ -41,6 +41,7 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         addChild(contentVC)
         contentVC.view.frame = view.bounds
         contentVC.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        contentVC.view.backgroundColor = UIColor(DSTheme.canvas)
         contentVC.view.layer.cornerCurve = .continuous
         contentVC.view.layer.masksToBounds = true
         view.addSubview(contentVC.view)
@@ -151,8 +152,12 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         contentVC.view.layer.shadowOffset = CGSize(width: -8, height: 0)
 
         sidebarVC.view.transform = CGAffineTransform(translationX: drawerShift, y: 0)
-        sidebarVC.view.alpha = 0.4 + 0.6 * p
+        // 收起时侧栏必须彻底不参与绘制，否则会从内容底下透出来
+        sidebarVC.view.alpha = p
+        sidebarVC.view.isHidden = p <= 0.001
         dimView.alpha = metrics.dim * p
+        // 收起时遮罩不能再吃事件，否则整块内容点不动
+        dimView.isUserInteractionEnabled = p > 0.01
     }
 
     private func clamp(_ value: CGFloat) -> CGFloat { min(max(value, 0), 1) }
