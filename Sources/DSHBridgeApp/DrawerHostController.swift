@@ -35,6 +35,8 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         addChild(sidebarVC)
         sidebarVC.view.frame = CGRect(x: 0, y: 0, width: metrics.width, height: UIScreen.main.bounds.height)
         sidebarVC.view.backgroundColor = UIColor(DSTheme.sidebar)
+        // 侧栏的缩放要贴着左边缘长，锚点必须在左侧中线
+        sidebarVC.view.layer.anchorPoint = CGPoint(x: 0, y: 0.5)
         view.addSubview(sidebarVC.view)
         sidebarVC.didMove(toParent: self)
 
@@ -83,8 +85,7 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         // 抽屉宽度按屏宽算，写死会在不同机型上要么太窄要么盖满
-        let proposed = (view.bounds.width * metrics.widthRatio).rounded()
-        metrics.width = min(max(proposed, metrics.minWidth), metrics.maxWidth)
+        metrics.width = metrics.resolvedWidth(for: view.bounds.size)
         sidebarVC.view.frame = CGRect(x: 0, y: 0, width: metrics.width, height: view.bounds.height)
         edgeView.frame = CGRect(x: 0, y: 0, width: metrics.edgeWidth, height: view.bounds.height)
         apply(progress: progress)
@@ -140,9 +141,10 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
 
     /// 唯一真源：所有几何量都由 progress 派生，且在同一帧内一次性写入。
     private func apply(progress p: CGFloat) {
-        let offset = metrics.width * metrics.parallax * p
-        let scale = 1 - (1 - metrics.contentScale) * p
-        let drawerShift = -metrics.width * metrics.drawerDepth * (1 - p)
+        let offset = metrics.mainAreaTranslation(progress: p, width: metrics.width)
+        let scale = metrics.contentScale(at: p)
+        let drawerShift = metrics.drawerParallaxOffset(progress: p, width: metrics.width)
+        let drawerScale = metrics.drawerScale(at: p)
 
         contentVC.view.transform = CGAffineTransform(translationX: offset, y: 0).scaledBy(x: scale, y: scale)
         contentVC.view.layer.cornerRadius = metrics.cornerRadius * p
@@ -152,6 +154,7 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         contentVC.view.layer.shadowOffset = CGSize(width: -8, height: 0)
 
         sidebarVC.view.transform = CGAffineTransform(translationX: drawerShift, y: 0)
+            .scaledBy(x: drawerScale, y: drawerScale)
         // 收起时侧栏必须彻底不参与绘制，否则会从内容底下透出来
         sidebarVC.view.alpha = p
         sidebarVC.view.isHidden = p <= 0.001
