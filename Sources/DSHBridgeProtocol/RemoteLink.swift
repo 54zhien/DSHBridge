@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 /// Application-layer message envelope carried inside the Noise channel.
-public struct RemoteMessage: Sendable {
+public struct RemoteMessage {
     public var v = 1
     public var id: String
     public var type: String
