@@ -5,7 +5,7 @@ import UIKit
 /// 这是获得“完全跟手”的前提。
 @MainActor
 final class DrawerHostController<Sidebar: View, Content: View>: UIViewController {
-    private let metrics: DrawerMetrics
+    private var metrics: DrawerMetrics
     private let sidebarVC: UIHostingController<Sidebar>
     private let contentVC: UIHostingController<Content>
     private let dimView = UIView()
@@ -30,11 +30,11 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
+        view.backgroundColor = UIColor(DSTheme.canvas)
 
         addChild(sidebarVC)
         sidebarVC.view.frame = CGRect(x: 0, y: 0, width: metrics.width, height: UIScreen.main.bounds.height)
-        sidebarVC.view.backgroundColor = .clear
+        sidebarVC.view.backgroundColor = UIColor(DSTheme.sidebar)
         view.addSubview(sidebarVC.view)
         sidebarVC.didMove(toParent: self)
 
@@ -53,6 +53,12 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         dimView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleDimTap)))
         view.addSubview(dimView)
 
+        // 展开后整块内容都被遮罩盖住，所以关闭手势必须挂在遮罩上，
+        // 否则它永远收不到事件——这是“展开后滑不回去”的根因。
+        let dimPan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        dimPan.delegate = self
+        dimView.addGestureRecognizer(dimPan)
+
         // 左侧边缘条：负责打开
         edgeView.frame = CGRect(x: 0, y: 0, width: metrics.edgeWidth, height: view.bounds.height)
         edgeView.autoresizingMask = [.flexibleHeight]
@@ -63,13 +69,21 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
 
         // 内容上的横向拖拽：负责关闭
         let closePan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        closePan.delegate = self
         contentVC.view.addGestureRecognizer(closePan)
+
+        // 侧栏要压在遮罩之上，不然展开时侧栏自己也被压暗
+        view.bringSubviewToFront(sidebarVC.view)
+        view.bringSubviewToFront(edgeView)
 
         apply(progress: 0)
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        // 抽屉宽度按屏宽算，写死会在不同机型上要么太窄要么盖满
+        let proposed = (view.bounds.width * metrics.widthRatio).rounded()
+        metrics.width = min(max(proposed, metrics.minWidth), metrics.maxWidth)
         sidebarVC.view.frame = CGRect(x: 0, y: 0, width: metrics.width, height: view.bounds.height)
         edgeView.frame = CGRect(x: 0, y: 0, width: metrics.edgeWidth, height: view.bounds.height)
         apply(progress: progress)
@@ -158,4 +172,15 @@ struct UIKitDrawer<Sidebar: View, Content: View>: UIViewControllerRepresentable 
     }
 
     func updateUIViewController(_ controller: DrawerHostController<Sidebar, Content>, context: Context) {}
+}
+
+extension DrawerHostController: UIGestureRecognizerDelegate {
+    nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        MainActor.assumeIsolated {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: pan.view)
+            // 只接管横向滑动，纵向留给内容里的滚动视图
+            return abs(velocity.x) > abs(velocity.y)
+        }
+    }
 }

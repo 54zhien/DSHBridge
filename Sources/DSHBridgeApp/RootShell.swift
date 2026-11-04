@@ -23,12 +23,15 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("DSH Bridge")
-                    .font(.title2.weight(.semibold))
-                Text("远程主机")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                WhaleMark(size: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DSH Bridge")
+                        .font(.title2.weight(.semibold))
+                    Text("远程主机")
+                        .font(.caption)
+                        .foregroundStyle(DSTheme.textSecondary)
+                }
             }
             .padding(.horizontal, 22)
             .padding(.top, 72)

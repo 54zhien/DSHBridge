@@ -165,7 +165,7 @@ private struct MessageBubble: View {
                     .font(.callout)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(.tint, in: .rect(cornerRadius: 18))
+                    .background(DSTheme.accent, in: .rect(cornerRadius: 18))
                     .foregroundStyle(.white)
             }
         case .assistant:
@@ -216,7 +216,7 @@ private struct ApprovalCard: View {
                 .font(.system(.caption, design: .monospaced))
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.black.opacity(0.25), in: .rect(cornerRadius: 10))
+                .background(DSTheme.canvas.opacity(0.7), in: .rect(cornerRadius: 10))
 
             HStack(spacing: 10) {
                 Button("拒绝") { onDecision(false) }

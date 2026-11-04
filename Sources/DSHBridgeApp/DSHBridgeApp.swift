@@ -5,7 +5,7 @@ struct DSHBridgeApp: App {
     var body: some Scene {
         WindowGroup {
             RootShell()
-                .preferredColorScheme(.dark)
+                .dsCanvas()
         }
     }
 }
