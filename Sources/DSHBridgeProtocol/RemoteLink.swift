@@ -126,7 +126,7 @@ public actor RemoteLink {
     private var clientDeviceId = ""
     private var pendingRpc: [String: CheckedContinuation<Data, Error>] = [:]
     private var pendingHandshake: CheckedContinuation<Data, Error>?
-    private var pendingAck: [String: CheckedContinuation<[String: Any], Error>] = [:]
+    private var pendingAck: [String: CheckedContinuation<Data, Error>] = [:]
 
     public init() {}
 
@@ -164,10 +164,10 @@ public actor RemoteLink {
         note("hello.ack")
 
         state = .connecting
-        let accepted = try await request("connect.request", waitType: "connect.accepted", payload: [
+        let accepted = object(try await request("connect.request", waitType: "connect.accepted", payload: [
             "hostDeviceId": hostDeviceId,
             "preferredTransports": ["relay"],
-        ], timeout: 30)
+        ], timeout: 30))
         guard let cid = accepted["connectionId"] as? String else {
             throw RemoteLinkError.transport("connect.accepted missing connectionId")
         }
@@ -198,7 +198,7 @@ public actor RemoteLink {
                 "ticket": ticket,
             ],
         ])
-        let ready = try await waitAck("relay.ready", timeout: 20)
+        let ready = object(try await waitAck("relay.ready", timeout: 20))
         if let assigned = epoch, let got = ready["epoch"] as? Int, assigned != got {
             throw RemoteLinkError.transport("relay epoch mismatch")
         }
@@ -212,7 +212,7 @@ public actor RemoteLink {
         state = .handshaking
         let prologue = Data("DSH-REMOTE\u{0}v=1\u{0}connection=\(connectionId)\u{0}host=\(hostDeviceId)\u{0}client=\(clientDeviceId)".utf8)
 
-        let initiator = NoiseIKInitiator(
+        let initiator = try NoiseIKInitiator(
             staticPrivateKey: identity.privateKey,
             remoteStaticPublicKey: hostIdentityKey,
             prologue: prologue
@@ -239,14 +239,21 @@ public actor RemoteLink {
     /// Sends `harness.remote.call` for one Host endpoint and returns the raw
     /// `{ok, value}` / `{ok:false, error}` result as JSON data.
     public func remoteCall(endpoint: String, payloadJSON: Data = Data("{}".utf8)) async throws -> Data {
-        guard state == .ready else { throw RemoteLinkError.transport("link not ready (\(state.rawValue))") }
+        guard state == .ready else { throw RemoteLinkError.transport("link not ready ((state.rawValue))") }
         var params: [String: Any] = ["endpoint": endpoint]
         params["payload"] = try JSONSerialization.jsonObject(with: payloadJSON)
-        let result = try await rpc("harness.remote.call", params)
-        return try JSONSerialization.data(withJSONObject: result)
+        let resultJSON = try await rpc("harness.remote.call", paramsJSON: try JSONSerialization.data(withJSONObject: params))
+        let payload = object(resultJSON)
+        if let ok = payload["ok"] as? Bool, ok == false {
+            let error = payload["error"] as? [String: Any] ?? [:]
+            throw RemoteLinkError.server(code: error["code"] as? String ?? "REMOTE_FAILED",
+                                          message: error["message"] as? String ?? "remote call failed")
+        }
+        return try JSONSerialization.data(withJSONObject: payload["value"] ?? [:])
     }
 
-    public func rpc(_ method: String, _ params: [String: Any], timeout: TimeInterval = 30) async throws -> Any {
+    public func rpc(_ method: String, paramsJSON: Data, timeout: TimeInterval = 30) async throws -> Data {
+        let params = (try? JSONSerialization.jsonObject(with: paramsJSON)) as? [String: Any] ?? [:]
         let message = RemoteMessage(type: "rpc.request", payload: ["method": method, "params": params])
         let body = try JSONSerialization.data(withJSONObject: [
             "v": message.v, "id": message.id, "type": message.type,
@@ -264,7 +271,7 @@ public actor RemoteLink {
             }
         }
 
-        let envelope = try JSONSerialization.jsonObject(with: responseData) as? [String: Any] ?? [:]
+        let envelope = object(responseData)
         let payload = envelope["payload"] as? [String: Any] ?? [:]
         if envelope["type"] as? String == "rpc.error" {
             throw RemoteLinkError.server(
@@ -272,7 +279,7 @@ public actor RemoteLink {
                 message: payload["message"] as? String ?? "rpc failed"
             )
         }
-        return payload["result"] ?? [:]
+        return try JSONSerialization.data(withJSONObject: payload["result"] ?? [:])
     }
 
     private func failRpc(_ id: String, _ error: Error) {
@@ -303,9 +310,13 @@ public actor RemoteLink {
 
     // MARK: - Frame plumbing
 
-    private func request(_ type: String, waitType: String, payload: [String: Any], timeout: TimeInterval) async throws -> [String: Any] {
+    private func request(_ type: String, waitType: String, payload: [String: Any], timeout: TimeInterval) async throws -> Data {
         try await sendControl(type, payload)
         return try await waitAck(waitType, timeout: timeout)
+    }
+
+    private func object(_ data: Data) -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
     }
 
     private func sendControl(_ type: String, _ payload: [String: Any]) async throws {
@@ -327,10 +338,10 @@ public actor RemoteLink {
         try await relay.send(.string(String(decoding: data, as: UTF8.self)))
     }
 
-    private func waitAck(_ type: String, timeout: TimeInterval) async throws -> [String: Any] {
-        try await withThrowingTaskGroup(of: [String: Any].self) { group in
+    private func waitAck(_ type: String, timeout: TimeInterval) async throws -> Data {
+        try await withThrowingTaskGroup(of: Data.self) { group in
             group.addTask {
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[String: Any], Error>) in
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
                     Task { await self.registerAck(type, continuation) }
                 }
             }
@@ -343,7 +354,7 @@ public actor RemoteLink {
         }
     }
 
-    private func registerAck(_ type: String, _ continuation: CheckedContinuation<[String: Any], Error>) {
+    private func registerAck(_ type: String, _ continuation: CheckedContinuation<Data, Error>) {
         pendingAck[type] = continuation
     }
 
@@ -405,7 +416,7 @@ public actor RemoteLink {
             note("control error \(payload["code"] as? String ?? "?")")
         default:
             if let continuation = pendingAck.removeValue(forKey: type) {
-                continuation.resume(returning: payload)
+                continuation.resume(returning: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data())
             }
         }
     }
@@ -436,7 +447,7 @@ public actor RemoteLink {
 
         if type == "relay.ready" {
             if let continuation = pendingAck.removeValue(forKey: "relay.ready") {
-                continuation.resume(returning: payload)
+                continuation.resume(returning: (try? JSONSerialization.data(withJSONObject: payload)) ?? Data())
             }
             return
         }
