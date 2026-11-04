@@ -193,11 +193,7 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         shadowView.layer.shadowOpacity = Float(0.10 * p)
         shadowView.alpha = p > 0.001 ? 1 : 0
         outlineView.alpha = p
-        shadowView.layer.shadowPath = UIBezierPath(
-            roundedRect: shadowView.bounds,
-            cornerWidth: radius,
-            cornerHeight: radius
-        ).cgPath
+        shadowView.layer.shadowPath = UIBezierPath(roundedRect: shadowView.bounds, cornerRadius: radius).cgPath
 
         // 侧栏不动，只在收起时彻底隐藏，避免任何透视残留
         sidebarVC.view.alpha = 1
