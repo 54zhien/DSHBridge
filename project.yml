@@ -18,6 +18,9 @@ targets:
       - path: Sources/DSHBridgeApp
       - path: Sources/DSHBridgeProtocol
       - path: Sources/DSHBridgeUI
+      - path: DSHBridge.icon
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.zhien.dshbridge
