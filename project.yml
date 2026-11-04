@@ -17,6 +17,7 @@ targets:
     sources:
       - path: Sources/DSHBridgeApp
       - path: Sources/DSHBridgeProtocol
+      - path: Sources/DSHBridgeUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.zhien.dshbridge

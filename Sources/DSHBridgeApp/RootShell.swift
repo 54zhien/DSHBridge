@@ -52,6 +52,7 @@ struct SidebarView: View {
 
 struct HomeView: View {
     var onMenu: () -> Void
+    @State private var showGallery = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,9 +75,15 @@ struct HomeView: View {
             Text("向右滑动打开侧栏")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            Button("图标校对") { showGallery = true }
+                .buttonStyle(.bordered)
+                .padding(.top, 12)
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.regularMaterial)
+        .sheet(isPresented: $showGallery) { IconGallery() }
     }
 }
