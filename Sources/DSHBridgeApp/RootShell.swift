@@ -3,9 +3,20 @@ import SwiftUI
 struct RootShell: View {
     @State private var model = AppModel()
     @State private var isOpen = false
+    @State private var auth = AuthStore()
     private let metrics = DrawerMetrics()
 
     var body: some View {
+        Group {
+            if auth.phase == .signedIn {
+                drawer
+            } else {
+                LoginView(store: auth)
+            }
+        }
+    }
+
+    private var drawer: some View {
         UIKitDrawer(isOpen: $isOpen, metrics: metrics) {
             SidebarView(model: model, isOpen: $isOpen)
         } content: {
