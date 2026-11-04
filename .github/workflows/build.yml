@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: macos-15
+    defaults:
+      run:
+        shell: bash -euo pipefail {0}
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -26,7 +29,14 @@ jobs:
             -scheme DSHBridge \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO | tail -40
+            CODE_SIGNING_ALLOWED=NO
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project DSHBridge.xcodeproj \
+            -scheme DSHBridge \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            CODE_SIGNING_ALLOWED=NO || true
       - name: Build (device, unsigned)
         run: |
           xcodebuild build \
@@ -35,12 +45,16 @@ jobs:
             -destination 'generic/platform=iOS' \
             -configuration Release \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tail -40
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
       - name: Package unsigned ipa
         run: |
-          mkdir -p out/Payload
-          cp -R build/Build/Products/Release-iphoneos/DSHBridge.app out/Payload/
-          cd out && zip -qr DSHBridge-unsigned.ipa Payload
+          APP=build/Build/Products/Release-iphoneos/DSHBridge.app
+          ls -la build/Build/Products/Release-iphoneos/
+          test -x "$APP/DSHBridge" || { echo "binary missing in $APP"; exit 1; }
+          rm -rf out && mkdir -p out/Payload
+          cp -R "$APP" out/Payload/
+          cd out && zip -qry DSHBridge-unsigned.ipa Payload
+          ls -lh DSHBridge-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: DSHBridge-unsigned
