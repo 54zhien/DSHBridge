@@ -85,21 +85,6 @@ struct SidebarView: View {
             }
 
             Spacer()
-                        if host.id == model.activeHostID {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 11)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            Spacer()
-
             HStack(spacing: 6) {
                 Circle()
                     .fill(live.isReady ? .green : .orange)
