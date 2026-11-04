@@ -148,6 +148,9 @@ public final class NoiseIKInitiator {
         remoteStaticPublic = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: remoteStaticPublicKey)
         state = SymmetricState(protocolName: Self.protocolName)
         state.mixHash(prologue)
+        // IK 的预共享消息是 `<- s`：对端静态公钥要先进入握手哈希，
+        // 否则 AD 不同，密文一样但 tag 对不上。
+        state.mixHash(remoteStaticPublicKey)
     }
 
     public var localStaticPublicKey: Data { staticPrivate.publicKey.rawRepresentation }
