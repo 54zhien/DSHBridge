@@ -17,16 +17,16 @@ struct DrawerMetrics {
     var railMinShortestSide: CGFloat = 340
 
     /// 完全打开时内容缩到的比例
-    var contentScale: CGFloat = 0.93
+    var contentScale: CGFloat = 0.94
     /// 内容右移占抽屉宽度的比例，小于 1 才有视差
-    var parallax: CGFloat = 0.28
+    var parallax: CGFloat = 0.9
     /// 侧栏自身的反向位移比例：打开时往左退一点，制造纵深
     var drawerParallax: CGFloat = 0.10
     /// 侧栏自身的缩放：打开时 0.97 → 1
     var drawerScale: CGFloat = 0.97
 
-    var cornerRadius: CGFloat = 20
-    var dim: Double = 0.35
+    var cornerRadius: CGFloat = 28
+    var dim: Double = 0.18
     var openThreshold: CGFloat = 0.5
     /// 判定为「甩」的速度阈值（宽度/秒）
     var flingVelocity: CGFloat = 1.2

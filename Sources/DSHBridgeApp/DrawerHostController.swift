@@ -1,13 +1,21 @@
 import SwiftUI
 import UIKit
 
-/// UIKit 抽屉宿主。手势回调里直接改 layer / transform，不进 SwiftUI 状态机，
-/// 这是获得“完全跟手”的前提。
+/// UIKit 抽屉宿主。
+///
+/// 层级照 zen 那套：侧栏是最底下的一张固定表面，首页是浮在它上面的一块圆角卡片。
+/// 展开时动的是首页——右移、缩小、长出圆角、投下阴影；侧栏自己一动不动。
+/// 遮罩挂在首页容器里，所以它只会压暗首页，不会把侧栏也压暗。
 @MainActor
 final class DrawerHostController<Sidebar: View, Content: View>: UIViewController, UIGestureRecognizerDelegate {
     private var metrics: DrawerMetrics
     private let sidebarVC: UIHostingController<Sidebar>
     private let contentVC: UIHostingController<Content>
+
+    /// 首页容器：位移与缩放都写在它身上，内部子视图保持原尺寸
+    private let contentContainer = UIView()
+    /// 首页自己的投影，必须和内容分层，否则圆角裁剪会把阴影一起裁掉
+    private let shadowView = UIView()
     private let dimView = UIView()
     private let edgeView = UIView()
 
@@ -32,37 +40,59 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         super.viewDidLoad()
         view.backgroundColor = UIColor(DSTheme.canvas)
 
+        // 1. 侧栏：铺满，固定不动，展开时只是被首页盖住/让出来
         addChild(sidebarVC)
-        sidebarVC.view.frame = CGRect(x: 0, y: 0, width: metrics.width, height: UIScreen.main.bounds.height)
+        sidebarVC.view.frame = view.bounds
+        sidebarVC.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         sidebarVC.view.backgroundColor = UIColor(DSTheme.sidebar)
-        // 侧栏的缩放要贴着左边缘长，锚点必须在左侧中线
-        sidebarVC.view.layer.anchorPoint = CGPoint(x: 0, y: 0.5)
         view.addSubview(sidebarVC.view)
         sidebarVC.didMove(toParent: self)
 
+        // 2. 首页容器
+        contentContainer.frame = view.bounds
+        contentContainer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        contentContainer.backgroundColor = .clear
+        view.addSubview(contentContainer)
+
+        // 2a. 投影层（在内容下面，圆角与内容同步）
+        shadowView.frame = contentContainer.bounds
+        shadowView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        shadowView.backgroundColor = UIColor(DSTheme.canvas)
+        shadowView.layer.cornerCurve = .continuous
+        shadowView.layer.shadowColor = UIColor.black.cgColor
+        shadowView.layer.shadowRadius = 18
+        shadowView.layer.shadowOffset = CGSize(width: -6, height: 0)
+        shadowView.layer.shadowOpacity = 0
+        shadowView.isUserInteractionEnabled = false
+        contentContainer.addSubview(shadowView)
+
+        // 2b. 内容
         addChild(contentVC)
-        contentVC.view.frame = view.bounds
+        contentVC.view.frame = contentContainer.bounds
         contentVC.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         contentVC.view.backgroundColor = UIColor(DSTheme.canvas)
         contentVC.view.layer.cornerCurve = .continuous
         contentVC.view.layer.masksToBounds = true
-        view.addSubview(contentVC.view)
+        contentContainer.addSubview(contentVC.view)
         contentVC.didMove(toParent: self)
 
-        dimView.frame = view.bounds
+        // 2c. 遮罩：只压首页，跟着首页一起位移缩放
+        dimView.frame = contentContainer.bounds
         dimView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         dimView.backgroundColor = .black
         dimView.alpha = 0
         dimView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleDimTap)))
-        view.addSubview(dimView)
+        contentContainer.addSubview(dimView)
 
-        // 展开后整块内容都被遮罩盖住，所以关闭手势必须挂在遮罩上，
-        // 否则它永远收不到事件——这是“展开后滑不回去”的根因。
+        // 3. 手势：内容上负责关闭，遮罩上也要能关，边缘条负责打开
+        let closePan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        closePan.delegate = self
+        contentVC.view.addGestureRecognizer(closePan)
+
         let dimPan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         dimPan.delegate = self
         dimView.addGestureRecognizer(dimPan)
 
-        // 左侧边缘条：负责打开
         edgeView.frame = CGRect(x: 0, y: 0, width: metrics.edgeWidth, height: view.bounds.height)
         edgeView.autoresizingMask = [.flexibleHeight]
         edgeView.backgroundColor = .clear
@@ -70,23 +100,12 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         edgeView.addGestureRecognizer(openPan)
         view.addSubview(edgeView)
 
-        // 内容上的横向拖拽：负责关闭
-        let closePan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
-        closePan.delegate = self
-        contentVC.view.addGestureRecognizer(closePan)
-
-        // 侧栏要压在遮罩之上，不然展开时侧栏自己也被压暗
-        view.bringSubviewToFront(sidebarVC.view)
-        view.bringSubviewToFront(edgeView)
-
         apply(progress: 0)
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // 抽屉宽度按屏宽算，写死会在不同机型上要么太窄要么盖满
         metrics.width = metrics.resolvedWidth(for: view.bounds.size)
-        sidebarVC.view.frame = CGRect(x: 0, y: 0, width: metrics.width, height: view.bounds.height)
         edgeView.frame = CGRect(x: 0, y: 0, width: metrics.edgeWidth, height: view.bounds.height)
         apply(progress: progress)
     }
@@ -107,7 +126,7 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         case .ended, .cancelled, .failed:
             let velocity = gesture.velocity(in: view).x / metrics.width
             let target: CGFloat
-            if abs(velocity) > 1.2 {
+            if abs(velocity) > metrics.flingVelocity {
                 target = velocity > 0 ? 1 : 0
             } else {
                 target = progress > metrics.openThreshold ? 1 : 0
@@ -120,8 +139,8 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
 
     private func animate(to target: CGFloat, velocity: CGFloat) {
         animator?.stopAnimation(true)
-        let spring = UISpringTimingParameters(dampingRatio: 0.86, initialVelocity: CGVector(dx: velocity, dy: 0))
-        let animator = UIViewPropertyAnimator(duration: 0.34, timingParameters: spring)
+        let spring = UISpringTimingParameters(dampingRatio: 0.88, initialVelocity: CGVector(dx: velocity, dy: 0))
+        let animator = UIViewPropertyAnimator(duration: 0.36, timingParameters: spring)
         animator.addAnimations { [weak self] in
             self?.apply(progress: target)
         }
@@ -139,36 +158,34 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         animator.startAnimation()
     }
 
-    /// 唯一真源：所有几何量都由 progress 派生，且在同一帧内一次性写入。
+    /// 唯一真源：所有几何量都由 progress 派生，同一帧内一次性写入。
     private func apply(progress p: CGFloat) {
         let offset = metrics.mainAreaTranslation(progress: p, width: metrics.width)
         let scale = metrics.contentScale(at: p)
-        let drawerShift = metrics.drawerParallaxOffset(progress: p, width: metrics.width)
-        let drawerScale = metrics.drawerScale(at: p)
+        let radius = metrics.cornerRadius * p
 
-        contentVC.view.transform = CGAffineTransform(translationX: offset, y: 0).scaledBy(x: scale, y: scale)
-        contentVC.view.layer.cornerRadius = metrics.cornerRadius * p
-        contentVC.view.layer.shadowColor = UIColor.black.cgColor
-        contentVC.view.layer.shadowOpacity = Float(0.35 * p)
-        contentVC.view.layer.shadowRadius = 24
-        contentVC.view.layer.shadowOffset = CGSize(width: -8, height: 0)
+        contentContainer.transform = CGAffineTransform(translationX: offset, y: 0)
+            .scaledBy(x: scale, y: scale)
 
-        sidebarVC.view.transform = CGAffineTransform(translationX: drawerShift, y: 0)
-            .scaledBy(x: drawerScale, y: drawerScale)
-        // 收起时侧栏必须彻底不参与绘制，否则会从内容底下透出来
-        sidebarVC.view.alpha = p
+        contentVC.view.layer.cornerRadius = radius
+        shadowView.layer.cornerRadius = radius
+        shadowView.layer.shadowOpacity = Float(0.28 * p)
+        shadowView.alpha = p > 0.001 ? 1 : 0
+
+        // 侧栏不动，只在收起时彻底隐藏，避免任何透视残留
+        sidebarVC.view.alpha = 1
         sidebarVC.view.isHidden = p <= 0.001
+
         dimView.alpha = metrics.dim * p
-        // 收起时遮罩不能再吃事件，否则整块内容点不动
         dimView.isUserInteractionEnabled = p > 0.01
     }
 
     private func clamp(_ value: CGFloat) -> CGFloat { min(max(value, 0), 1) }
+
     nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         MainActor.assumeIsolated {
             guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
             let velocity = pan.velocity(in: pan.view)
-            // 只接管横向滑动，纵向留给内容里的滚动视图
             return abs(velocity.x) > abs(velocity.y)
         }
     }
@@ -189,4 +206,3 @@ struct UIKitDrawer<Sidebar: View, Content: View>: UIViewControllerRepresentable 
 
     func updateUIViewController(_ controller: DrawerHostController<Sidebar, Content>, context: Context) {}
 }
-
