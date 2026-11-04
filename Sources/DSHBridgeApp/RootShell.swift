@@ -21,7 +21,7 @@ struct RootShell: View {
         UIKitDrawer(isOpen: $isOpen, metrics: metrics) {
             SidebarView(model: model, isOpen: $isOpen, auth: auth, live: live)
         } content: {
-            SessionsScreen(model: model, onMenu: {
+            SessionsScreen(model: model, live: live, onMenu: {
                 withAnimation(metrics.spring) { isOpen = true }
             })
         }

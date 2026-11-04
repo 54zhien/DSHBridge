@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SessionsScreen: View {
     @Bindable var model: AppModel
+    var live: LiveStore
     var onMenu: () -> Void
 
     var body: some View {
@@ -20,7 +21,7 @@ struct SessionsScreen: View {
             }
             .scrollIndicators(.hidden)
             .navigationDestination(for: SessionSummary.self) { session in
-                ChatScreen(model: model, session: session)
+                ChatScreen(model: model, session: session, live: live)
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 HeaderBar(title: "会话", onMenu: onMenu)
@@ -91,12 +92,17 @@ struct HeaderBar: View {
 struct ChatScreen: View {
     @Bindable var model: AppModel
     let session: SessionSummary
+    var live: LiveStore
+
+    private var shownMessages: [ChatMessage] {
+        live.messages.isEmpty ? model.messages : live.messages
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(model.messages) { message in
+                    ForEach(shownMessages) { message in
                         MessageBubble(message: message).id(message.id)
                     }
                     if let approval = model.pendingApproval {
@@ -118,6 +124,7 @@ struct ChatScreen: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+        .task { await live.loadHistory(sessionId: session.rawId.isEmpty ? session.id.uuidString : session.rawId) }
         .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -131,13 +138,17 @@ struct ChatScreen: View {
                 .padding(.vertical, 10)
 
             if model.messages.contains(where: { $0.isStreaming }) {
-                Button { model.stop() } label: {
+                Button { model.stop(); Task { await live.cancelCurrent() } } label: {
                     Image(systemName: "stop.fill").font(.system(size: 15, weight: .semibold))
                         .frame(width: 38, height: 38)
                 }
                 .buttonStyle(.glass)
             } else {
-                Button { model.send() } label: {
+                Button {
+                    let text = model.draft
+                    model.draft = ""
+                    Task { await live.send(text) }
+                } label: {
                     Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold))
                         .frame(width: 38, height: 38)
                 }

@@ -16,6 +16,8 @@ final class LiveStore {
 
     var phase: Phase = .idle
     var sessions: [SessionSummary] = []
+    var messages: [ChatMessage] = []
+    var activeSessionId: String?
     var connectedHostName: String?
     var lastError: String?
 
@@ -58,6 +60,56 @@ final class LiveStore {
         }
     }
 
+    // MARK: - 会话内操作
+
+    func loadHistory(sessionId: String) async {
+        guard let link else { return }
+        activeSessionId = sessionId
+        messages = []
+        let body: [String: Any] = [
+            "request": [
+                "address": ["kind": "session", "sessionId": sessionId],
+                "throughSeq": 0,
+                "beforeSeq": 0,
+                "maxMessages": 80,
+            ],
+        ]
+        guard let payload = try? JSONSerialization.data(withJSONObject: body) else { return }
+        do {
+            let data = try await link.remoteCall(endpoint: "session/page", payloadJSON: payload)
+            messages = Self.decodeMessages(data)
+        } catch {
+            lastError = AuthStore.describe(error)
+        }
+    }
+
+    func send(_ text: String) async {
+        guard let link, let sessionId = activeSessionId else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        messages.append(ChatMessage(id: UUID(), role: .user, text: trimmed, isStreaming: false))
+        let body: [String: Any] = [
+            "request": [
+                "requestId": UUID().uuidString.lowercased(),
+                "sessionId": sessionId,
+                "mode": "queue",
+                "content": [["type": "text", "text": trimmed]],
+            ],
+        ]
+        guard let payload = try? JSONSerialization.data(withJSONObject: body) else { return }
+        do {
+            _ = try await link.remoteCall(endpoint: "session/prompt", payloadJSON: payload)
+        } catch {
+            lastError = AuthStore.describe(error)
+        }
+    }
+
+    func cancelCurrent() async {
+        guard let link, let sessionId = activeSessionId else { return }
+        guard let payload = try? JSONSerialization.data(withJSONObject: ["request": ["sessionId": sessionId]]) else { return }
+        _ = try? await link.remoteCall(endpoint: "session/cancel", payloadJSON: payload)
+    }
+
     func disconnect() {
         link = nil
         sessions = []
@@ -95,6 +147,7 @@ final class LiveStore {
             let running = status == "running" || status == "active" || (item["isRunning"] as? Bool ?? false)
             return SessionSummary(
                 id: stableUUID(id),
+                rawId: id,
                 title: title,
                 subtitle: subtitle,
                 updatedAt: updated,
@@ -102,6 +155,23 @@ final class LiveStore {
                 unread: item["unread"] as? Int ?? 0
             )
         }
+    }
+
+    /// 历史记录结构随 Host 版本浮动，这里只挑能认出来的文本片段，认不出就跳过。
+    static func decodeMessages(_ data: Data) -> [ChatMessage] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+        let records = (root["records"] as? [[String: Any]]) ?? []
+        var out: [ChatMessage] = []
+        for record in records {
+            let role = (record["role"] as? String) ?? (record["type"] as? String) ?? ""
+            let content = record["content"] as? [[String: Any]] ?? []
+            let text = content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined()
+            let plain = text.isEmpty ? ((record["text"] as? String) ?? "") : text
+            guard !plain.isEmpty else { continue }
+            let mapped: MessageRole = role.contains("user") ? .user : .assistant
+            out.append(ChatMessage(id: stableUUID(UUID().uuidString), role: mapped, text: plain, isStreaming: false))
+        }
+        return out
     }
 
     private static func stableUUID(_ string: String) -> UUID {

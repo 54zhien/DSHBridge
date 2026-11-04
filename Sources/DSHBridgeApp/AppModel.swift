@@ -18,6 +18,8 @@ struct HostProfile: Identifiable, Hashable {
 
 struct SessionSummary: Identifiable, Hashable {
     let id: UUID
+    /// Host 侧的真实 sessionId，发请求要用它
+    var rawId: String = ""
     var title: String
     var subtitle: String
     var updatedAt: Date
