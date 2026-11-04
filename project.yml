@@ -31,11 +31,16 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: NO
+    scheme:
+      testTargets:
+        - DSHBridgeTests
   DSHBridgeTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: Tests/DSHBridgeTests
+      - path: Fixtures
+        buildPhase: resources
     dependencies:
       - target: DSHBridge
     settings:
