@@ -23,7 +23,7 @@
           "image-name": "whale.svg",
           "name": "whale",
           "position": {
-            "scale": 1,
+            "scale": 0.95,
             "translation-in-points": [
               0,
               0
