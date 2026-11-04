@@ -188,12 +188,8 @@ public final class NoiseIKInitiator {
         state.mixKey(try dh(ephemeralPrivate, remoteEphemeral))
         state.mixKey(try dh(staticPrivate, remoteEphemeral))
 
-        var cursor = message.index(message.startIndex, offsetBy: 32)
-        let staticLength = min(48, message.distance(from: cursor, to: message.endIndex))
-        guard staticLength > 0 else { throw NoiseError.truncatedMessage }
-        _ = try state.decryptAndHash(Data(message[cursor...].prefix(staticLength)))
-        cursor = message.index(cursor, offsetBy: staticLength)
-
+        // IK 第二条只有 e、ee、se，对端静态公钥不重发，32 字节后直接是 payload。
+        let cursor = message.index(message.startIndex, offsetBy: 32)
         let payload = try state.decryptAndHash(Data(message[cursor...]))
 
         let (sending, receiving) = state.split()
