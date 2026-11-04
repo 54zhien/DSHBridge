@@ -1,0 +1,47 @@
+name: build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          ls /Applications | grep -i xcode
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build (unsigned, simulator)
+        run: |
+          xcodebuild build \
+            -project DSHBridge.xcodeproj \
+            -scheme DSHBridge \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO | tail -40
+      - name: Build (device, unsigned)
+        run: |
+          xcodebuild build \
+            -project DSHBridge.xcodeproj \
+            -scheme DSHBridge \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tail -40
+      - name: Package unsigned ipa
+        run: |
+          mkdir -p out/Payload
+          cp -R build/Build/Products/Release-iphoneos/DSHBridge.app out/Payload/
+          cd out && zip -qr DSHBridge-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSHBridge-unsigned
+          path: out/DSHBridge-unsigned.ipa
