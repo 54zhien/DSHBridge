@@ -29,7 +29,20 @@
               0
             ]
           },
-          "opacity": 1
+          "opacity": 1,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "srgb:0.06000000,0.06000000,0.07000000,0.90000000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.94000000,0.94000000,0.95000000,0.90000000"
+              }
+            }
+          ]
         }
       ],
       "shadow": {
