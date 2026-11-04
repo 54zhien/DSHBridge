@@ -42,6 +42,19 @@ jobs:
             -configuration Release \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Compile Icon Composer icon
+        run: |
+          APP=build/Build/Products/Release-iphoneos/DSHBridge.app
+          PLIST=$RUNNER_TEMP/icon-partial.plist
+          xcrun actool DSHBridge.icon \
+            --compile "$APP" \
+            --platform iphoneos \
+            --minimum-deployment-target 26.0 \
+            --app-icon DSHBridge \
+            --output-partial-info-plist "$PLIST"
+          ls -l "$APP/Assets.car"
+          /usr/libexec/PlistBuddy -c "Merge $PLIST" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons" "$APP/Info.plist"
       - name: Package unsigned ipa
         run: |
           APP=build/Build/Products/Release-iphoneos/DSHBridge.app
