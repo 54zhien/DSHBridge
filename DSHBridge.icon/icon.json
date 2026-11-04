@@ -29,7 +29,20 @@
               0
             ]
           },
-          "opacity": 1
+          "opacity": 1,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "srgb:0.05000000,0.05000000,0.06000000,0.92000000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.95000000,0.95000000,0.96000000,0.92000000"
+              }
+            }
+          ]
         }
       ],
       "shadow": {
@@ -37,8 +50,8 @@
         "opacity": 0.35
       },
       "translucency": {
-        "enabled": false,
-        "value": 0.5
+        "enabled": true,
+        "value": 0.35
       },
       "specular": true,
       "lighting": "individual"
