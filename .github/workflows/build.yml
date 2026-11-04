@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     defaults:
       run:
         shell: bash -euo pipefail {0}
@@ -16,7 +16,9 @@ jobs:
       - name: Select Xcode
         run: |
           ls /Applications | grep -i xcode
-          sudo xcode-select -s /Applications/Xcode.app
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "using $XCODE"
+          sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
