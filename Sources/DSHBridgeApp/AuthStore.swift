@@ -74,6 +74,15 @@ final class AuthStore {
         }
     }
 
+    /// 建链需要：服务器地址、可用的 access token、本机身份。
+    func liveContext() async throws -> (baseUrl: URL, token: String, identity: DeviceIdentity) {
+        guard let credentials, let baseUrl else {
+            throw RemoteAPIError(code: "NOT_SIGNED_IN", message: "尚未登录", status: 0)
+        }
+        let fresh = try await validCredentials(credentials, baseUrl: baseUrl)
+        return (baseUrl, fresh.accessToken, identity)
+    }
+
     func refreshDevices() async {
         guard let credentials, let baseUrl else { return }
         do {
@@ -176,5 +185,22 @@ struct DeviceClient: Sendable {
             throw RemoteAPIError(code: "HTTP_\(status)", message: String(data: data.prefix(160), encoding: .utf8) ?? "", status: status)
         }
         return try JSONDecoder().decode(Response.self, from: data).items
+    }
+
+    /// 设备列表里没有 identityKey，必须单取一台。
+    func identityKey(deviceId: String) async throws -> Data {
+        struct Response: Decodable { let identityKey: String }
+        var request = URLRequest(url: baseUrl.appending(path: "/api/v1/devices/(deviceId)"))
+        request.setValue("Bearer (token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw RemoteAPIError(code: "HTTP_(status)", message: String(data: data.prefix(160), encoding: .utf8) ?? "", status: status)
+        }
+        let key = try JSONDecoder().decode(Response.self, from: data).identityKey
+        guard let raw = Base64URL.decode(key) else {
+            throw RemoteAPIError(code: "BAD_KEY", message: "identityKey 解不出来", status: 0)
+        }
+        return raw
     }
 }
