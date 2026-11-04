@@ -4,7 +4,7 @@ import UIKit
 /// UIKit 抽屉宿主。手势回调里直接改 layer / transform，不进 SwiftUI 状态机，
 /// 这是获得“完全跟手”的前提。
 @MainActor
-final class DrawerHostController<Sidebar: View, Content: View>: UIViewController {
+final class DrawerHostController<Sidebar: View, Content: View>: UIViewController, UIGestureRecognizerDelegate {
     private var metrics: DrawerMetrics
     private let sidebarVC: UIHostingController<Sidebar>
     private let contentVC: UIHostingController<Content>
@@ -156,6 +156,14 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
     }
 
     private func clamp(_ value: CGFloat) -> CGFloat { min(max(value, 0), 1) }
+    nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        MainActor.assumeIsolated {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: pan.view)
+            // 只接管横向滑动，纵向留给内容里的滚动视图
+            return abs(velocity.x) > abs(velocity.y)
+        }
+    }
 }
 
 /// SwiftUI 包装。侧栏与内容仍用 SwiftUI 写，只有抽屉这一层是 UIKit。
@@ -174,13 +182,3 @@ struct UIKitDrawer<Sidebar: View, Content: View>: UIViewControllerRepresentable 
     func updateUIViewController(_ controller: DrawerHostController<Sidebar, Content>, context: Context) {}
 }
 
-extension DrawerHostController: UIGestureRecognizerDelegate {
-    nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        MainActor.assumeIsolated {
-            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
-            let velocity = pan.velocity(in: pan.view)
-            // 只接管横向滑动，纵向留给内容里的滚动视图
-            return abs(velocity.x) > abs(velocity.y)
-        }
-    }
-}

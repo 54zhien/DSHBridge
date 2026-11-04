@@ -194,7 +194,7 @@ private struct MessageBubble: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
+            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 20))
         }
     }
 }

@@ -15,7 +15,7 @@ struct DrawerMetrics {
     var parallax: CGFloat = 0.32
     /// 抽屉自身反向位移的比例，制造纵深
     var drawerDepth: CGFloat = 0.12
-    var cornerRadius: CGFloat = 18
+    var cornerRadius: CGFloat = 20
     var dim: Double = 0.35
     var openThreshold: CGFloat = 0.5
     /// 判定为“甩”的预测位移阈值（占宽度的比例）
