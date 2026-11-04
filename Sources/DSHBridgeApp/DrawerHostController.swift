@@ -16,6 +16,7 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
     private let contentContainer = UIView()
     /// 首页自己的投影，必须和内容分层，否则圆角裁剪会把阴影一起裁掉
     private let shadowView = UIView()
+    private let outlineView = UIView()
     private let dimView = UIView()
     private let edgeView = UIView()
 
@@ -60,8 +61,8 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         shadowView.backgroundColor = UIColor(DSTheme.canvas)
         shadowView.layer.cornerCurve = .continuous
         shadowView.layer.shadowColor = UIColor.black.cgColor
-        shadowView.layer.shadowRadius = 18
-        shadowView.layer.shadowOffset = CGSize(width: -6, height: 0)
+        shadowView.layer.shadowRadius = 14
+        shadowView.layer.shadowOffset = CGSize(width: -4, height: 0)
         shadowView.layer.shadowOpacity = 0
         shadowView.isUserInteractionEnabled = false
         contentContainer.addSubview(shadowView)
@@ -76,7 +77,22 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         contentContainer.addSubview(contentVC.view)
         contentVC.didMove(toParent: self)
 
-        // 2c. 遮罩：只压首页，跟着首页一起位移缩放
+        // 2c. 描边：zen 那种随展开渐显的 0.75pt 边缘细线
+        outlineView.frame = contentContainer.bounds
+        outlineView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        outlineView.backgroundColor = .clear
+        outlineView.layer.cornerCurve = .continuous
+        outlineView.layer.borderWidth = 0.75
+        outlineView.layer.borderColor = UIColor { trait in
+            trait.userInterfaceStyle == .dark
+                ? UIColor.white.withAlphaComponent(0.16)
+                : UIColor.black.withAlphaComponent(0.10)
+        }.cgColor
+        outlineView.isUserInteractionEnabled = false
+        outlineView.alpha = 0
+        contentContainer.addSubview(outlineView)
+
+        // 2d. 遮罩：只压首页，跟着首页一起位移缩放
         dimView.frame = contentContainer.bounds
         dimView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         dimView.backgroundColor = .black
@@ -106,6 +122,7 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         metrics.width = metrics.resolvedWidth(for: view.bounds.size)
+        metrics.displayCornerRadius = Self.screenCornerRadius(in: view)
         edgeView.frame = CGRect(x: 0, y: 0, width: metrics.edgeWidth, height: view.bounds.height)
         apply(progress: progress)
     }
@@ -160,17 +177,27 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
 
     /// 唯一真源：所有几何量都由 progress 派生，同一帧内一次性写入。
     private func apply(progress p: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
         let offset = metrics.mainAreaTranslation(progress: p, width: metrics.width)
         let scale = metrics.contentScale(at: p)
-        let radius = metrics.cornerRadius * p
+        let radius = metrics.displayCornerRadius * p
 
         contentContainer.transform = CGAffineTransform(translationX: offset, y: 0)
             .scaledBy(x: scale, y: scale)
 
         contentVC.view.layer.cornerRadius = radius
         shadowView.layer.cornerRadius = radius
-        shadowView.layer.shadowOpacity = Float(0.28 * p)
+        outlineView.layer.cornerRadius = radius
+        shadowView.layer.shadowOpacity = Float(0.10 * p)
         shadowView.alpha = p > 0.001 ? 1 : 0
+        outlineView.alpha = p
+        shadowView.layer.shadowPath = UIBezierPath(
+            roundedRect: shadowView.bounds,
+            cornerWidth: radius,
+            cornerHeight: radius
+        ).cgPath
 
         // 侧栏不动，只在收起时彻底隐藏，避免任何透视残留
         sidebarVC.view.alpha = 1
@@ -178,9 +205,20 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
 
         dimView.alpha = metrics.dim * p
         dimView.isUserInteractionEnabled = p > 0.01
+
+        CATransaction.commit()
     }
 
     private func clamp(_ value: CGFloat) -> CGFloat { min(max(value, 0), 1) }
+
+    /// 屏幕物理圆角在公开 API 里拿不到，只能读私有键；读不到就退回 48。
+    private static func screenCornerRadius(in view: UIView) -> CGFloat {
+        let screen = view.window?.screen ?? UIScreen.main
+        if let value = screen.value(forKey: "_displayCornerRadius") as? CGFloat, value > 0 {
+            return value
+        }
+        return 48
+    }
 
     nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         MainActor.assumeIsolated {

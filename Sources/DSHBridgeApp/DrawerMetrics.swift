@@ -25,8 +25,9 @@ struct DrawerMetrics {
     /// 侧栏自身的缩放：打开时 0.97 → 1
     var drawerScale: CGFloat = 0.97
 
-    var cornerRadius: CGFloat = 28
-    var dim: Double = 0.18
+    /// 屏幕圆角。取不到就退回 48，宁可略小也不要突出去
+    var displayCornerRadius: CGFloat = 48
+    var dim: Double = 0.08
     var openThreshold: CGFloat = 0.5
     /// 判定为「甩」的速度阈值（宽度/秒）
     var flingVelocity: CGFloat = 1.2
