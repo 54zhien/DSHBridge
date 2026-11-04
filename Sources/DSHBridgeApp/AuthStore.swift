@@ -4,6 +4,7 @@ import UIKit
 
 /// 登录状态。把「服务器地址 → OAuth → 设备注册 → 主机列表」串起来，
 /// 只暴露 UI 真正需要的几个字段。
+@MainActor
 @Observable
 final class AuthStore {
     enum Phase: Equatable {
