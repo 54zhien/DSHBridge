@@ -191,7 +191,7 @@ struct DeviceClient: Sendable {
     func identityKey(deviceId: String) async throws -> Data {
         struct Response: Decodable { let identityKey: String }
         var request = URLRequest(url: baseUrl.appending(path: "/api/v1/devices/\(deviceId)"))
-        request.setValue("Bearer (token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
