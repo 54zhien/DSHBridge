@@ -83,11 +83,42 @@ public struct AuthClient: Sendable {
     }
 
     private func send<T: Decodable>(_ path: String, method: String, body: Data?, bearer: String?) async throws -> T {
-        let json = try await sendRaw(path, method: method, body: body, bearer: bearer)
-        guard let object = json as? T else {
-            throw RemoteAPIError(code: "INVALID_RESPONSE", message: "服务器返回的结构不认识", status: 0)
+        let data = try await sendData(path, method: method, body: body, bearer: bearer)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            let snippet = String(data: data.prefix(200), encoding: .utf8) ?? ""
+            throw RemoteAPIError(code: "INVALID_RESPONSE", message: "服务器返回的结构不认识：" + snippet, status: 0)
         }
-        return object
+    }
+
+    private func sendData(_ path: String, method: String, body: Data?, bearer: String?) async throws -> Data {
+        guard let url = URL(string: path, relativeTo: baseUrl) else {
+            throw RemoteAPIError(code: "BAD_URL", message: "服务器地址不合法", status: 0)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        if let bearer {
+            request.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            var code = "HTTP_" + String(status)
+            var message = String(data: data.prefix(200), encoding: .utf8) ?? ""
+            if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let error = object["error"] as? [String: Any] {
+                code = error["code"] as? String ?? code
+                message = error["message"] as? String ?? message
+            }
+            throw RemoteAPIError(code: code, message: message, status: status)
+        }
+        return data
     }
 
     private func sendRaw(_ path: String, method: String, body: Data?, bearer: String?) async throws -> Any {
