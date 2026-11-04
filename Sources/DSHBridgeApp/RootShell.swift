@@ -65,7 +65,7 @@ struct SidebarView: View {
                             Text(device.name ?? device.deviceId.prefix(8).description)
                                 .font(.body)
                                 .foregroundStyle(.primary)
-                            Text("(device.platform ?? "unknown") · (device.deviceId.prefix(8))")
+                            Text("\(device.platform ?? \"unknown\") · \(device.deviceId.prefix(8))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
