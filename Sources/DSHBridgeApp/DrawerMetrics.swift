@@ -27,12 +27,20 @@ struct DrawerMetrics {
 
     /// 屏幕圆角。取不到就退回 48，宁可略小也不要突出去
     var displayCornerRadius: CGFloat = 48
+    /// 卡片圆角上限，照 zen 的 AppSpaceGeometry：min(24, 短边 * 0.1)
+    var cornerRadiusCap: CGFloat = 24
     var dim: Double = 0.08
     var openThreshold: CGFloat = 0.5
     /// 判定为「甩」的速度阈值（宽度/秒）
     var flingVelocity: CGFloat = 1.2
     var spring = Animation.spring(response: 0.34, dampingFraction: 0.86)
     var edgeWidth: CGFloat = 24
+
+    /// 卡片圆角。zen 的规则是跟着卡片尺寸走并封顶，不是套屏幕圆角
+    func cornerRadius(progress p: CGFloat, size: CGSize) -> CGFloat {
+        let base = min(cornerRadiusCap, min(size.width, size.height) * 0.1)
+        return base * max(0, min(1, p))
+    }
 
     /// 按最短边算宽度，再夹到上下限
     func resolvedWidth(for size: CGSize) -> CGFloat {

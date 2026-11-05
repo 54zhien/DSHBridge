@@ -182,7 +182,7 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
 
         let offset = metrics.mainAreaTranslation(progress: p, width: metrics.width)
         let scale = metrics.contentScale(at: p)
-        let radius = metrics.displayCornerRadius * p
+        let radius = metrics.cornerRadius(progress: p, size: contentContainer.bounds.size)
 
         contentContainer.transform = CGAffineTransform(translationX: offset, y: 0)
             .scaledBy(x: scale, y: scale)
