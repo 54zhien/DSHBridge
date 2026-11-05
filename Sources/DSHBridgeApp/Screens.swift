@@ -105,10 +105,9 @@ struct ChatScreen: View {
                     ForEach(shownMessages) { message in
                         MessageBubble(message: message).id(message.id)
                     }
-                    if let approval = model.pendingApproval {
+                    if let approval = live.approvals.first {
                         ApprovalCard(request: approval) { decision in
-                            model.pendingApproval = nil
-                            _ = decision
+                            live.respond(to: approval, allow: decision)
                         }
                         .id("approval")
                     }

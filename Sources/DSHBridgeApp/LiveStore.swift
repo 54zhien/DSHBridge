@@ -52,6 +52,7 @@ final class LiveStore {
             sessions = Self.decodeSessions(data)
             connectedHostName = device.name ?? device.deviceId
             phase = .ready
+            startEvents()
         } catch {
             let message = AuthStore.describe(error)
             lastError = message
@@ -145,6 +146,67 @@ final class LiveStore {
         guard let link, let sessionId = activeSessionId else { return }
         guard let payload = try? JSONSerialization.data(withJSONObject: ["request": ["sessionId": sessionId]]) else { return }
         _ = try? await link.remoteCall(endpoint: "session/cancel", payloadJSON: payload)
+    }
+
+    // MARK: - 审批
+
+    var approvals: [ApprovalRequest] = []
+    private var eventClientId: String?
+    private var eventTask: Task<Void, Never>?
+
+    func startEvents() {
+        guard let link else { return }
+        eventTask?.cancel()
+        eventTask = Task { @MainActor in
+            do {
+                let payload = Data(#"{"args":{}}"#.utf8)
+                let stream = try await link.openStream(endpoint: "$events", payloadJSON: payload)
+                for await frame in stream { self.handleEventFrame(frame) }
+            } catch {
+                self.lastError = AuthStore.describe(error)
+            }
+        }
+    }
+
+    private func handleEventFrame(_ frame: Data) {
+        guard let object = try? JSONSerialization.jsonObject(with: frame) as? [String: Any] else { return }
+        if let clientId = object["clientId"] as? String {
+            eventClientId = clientId
+            return
+        }
+        guard let type = object["type"] as? String else { return }
+        switch type {
+        case "approval/requested":
+            let approvalId = object["approvalId"] as? String ?? UUID().uuidString
+            approvals.append(ApprovalRequest(id: UUID(),
+                                             tool: object["toolName"] as? String ?? "工具调用",
+                                             summary: object["reason"] as? String ?? "需要你的确认",
+                                             detail: approvalId))
+        case "approval/resolved":
+            if let approvalId = object["approvalId"] as? String {
+                approvals.removeAll { $0.detail == approvalId }
+            }
+        default:
+            break
+        }
+    }
+
+    func respond(to approval: ApprovalRequest, allow: Bool) {
+        guard let link, let clientId = eventClientId else { return }
+        let args: [String: Any] = [
+            "clientId": clientId,
+            "eventId": approval.detail,
+            "outcome": ["kind": "result", "value": allow ? "allowed-once" : "rejected"],
+        ]
+        Task { @MainActor in
+            do {
+                let body = try JSONSerialization.data(withJSONObject: args)
+                _ = try await link.rpc("$events/result", paramsJSON: body)
+                self.approvals.removeAll { $0.id == approval.id }
+            } catch {
+                self.lastError = AuthStore.describe(error)
+            }
+        }
     }
 
     func disconnect() {
