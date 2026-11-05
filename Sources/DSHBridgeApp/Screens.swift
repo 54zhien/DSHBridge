@@ -93,6 +93,7 @@ struct ChatScreen: View {
     @Bindable var model: AppModel
     let session: SessionSummary
     var live: LiveStore
+    @State private var showFrames = false
 
     private var shownMessages: [ChatMessage] {
         live.messages.isEmpty ? model.messages : live.messages
@@ -125,6 +126,26 @@ struct ChatScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .task { await live.loadHistory(sessionId: session.rawId.isEmpty ? session.id.uuidString : session.rawId) }
         .navigationTitle(session.title)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("帧") { showFrames = true }
+            }
+        }
+        .sheet(isPresented: $showFrames) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(live.debugFrames.enumerated()), id: .offset) { pair in
+                            Text(pair.element)
+                                .font(.system(.caption2, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding()
+                }
+                .navigationTitle("会话帧 (live.debugFrames.count)")
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
     }
 

@@ -81,6 +81,12 @@ final class LiveStore {
             let deadline = Date().addingTimeInterval(2.5)
             for await frame in stream {
                 frames.append(frame)
+                if debugFrames.count < 8 {
+                    let pretty = (try? JSONSerialization.jsonObject(with: frame))
+                        .flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.prettyPrinted, .sortedKeys]) }
+                        .flatMap { String(data: $0, encoding: .utf8) } ?? "<非 JSON>"
+                    debugFrames.append(String(pretty.prefix(6000)))
+                }
                 if Date() > deadline { break }
             }
             messages = Self.decodeFrames(frames)
@@ -151,6 +157,8 @@ final class LiveStore {
     // MARK: - 审批
 
     var approvals: [ApprovalRequest] = []
+    /// 原始会话帧，方便在真机上直接看结构
+    var debugFrames: [String] = []
     private var eventClientId: String?
     private var eventTask: Task<Void, Never>?
 
