@@ -135,10 +135,11 @@ struct ChatScreen: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        ForEach(Array(live.debugFrames.enumerated()), id: .offset) { pair in
-                            Text(pair.element)
+                        ForEach(live.debugFrames.indices, id: \.self) { index in
+                            Text(live.debugFrames[index])
                                 .font(.system(.caption2, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         }
                     }
                     .padding()
