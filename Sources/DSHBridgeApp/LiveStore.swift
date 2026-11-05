@@ -26,7 +26,22 @@ final class LiveStore {
     var isReady: Bool { phase == .ready }
     var isBusy: Bool { if case .working = phase { return true }; return false }
 
+    private var wantsConnection = false
+
     func connect(device: RemoteDevice, auth: AuthStore) async {
+        wantsConnection = true
+        var attempt = 0
+        while wantsConnection {
+            await connectOnce(device: device, auth: auth)
+            if case .ready = phase { return }
+            attempt += 1
+            let delay = min(30, pow(2, Double(attempt)))
+            lastError = (lastError ?? "连接中断") + " · (Int(delay)) 秒后重试"
+            try? await Task.sleep(for: .seconds(delay))
+        }
+    }
+
+    private func connectOnce(device: RemoteDevice, auth: AuthStore) async {
         guard !isBusy else { return }
         lastError = nil
         do {
@@ -49,7 +64,7 @@ final class LiveStore {
             phase = .working("拉取会话")
             let payload = #"{"_request":{}}"#.data(using: .utf8) ?? Data()
             let data = try await link.remoteCall(endpoint: "session/list", payloadJSON: payload)
-            sessions = Self.decodeSessions(data)
+            sessions = Self.decodeSessions(data).sorted { $0.updatedAt > $1.updatedAt }
             connectedHostName = device.name ?? device.deviceId
             phase = .ready
             startEvents()
@@ -218,6 +233,7 @@ final class LiveStore {
     }
 
     func disconnect() {
+        wantsConnection = false
         link = nil
         sessions = []
         connectedHostName = nil
