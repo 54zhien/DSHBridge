@@ -41,6 +41,7 @@ final class AuthStore {
             credentials = saved
             account = saved.account
             phase = .signedIn
+            Task { await refreshDevices() }
         }
     }
 
@@ -168,6 +169,8 @@ public struct RemoteDevice: Decodable, Sendable, Identifiable {
     public let name: String?
     public let platform: String?
     public let online: Bool?
+    public let role: String?
+    public let lastConnectedAt: Double?
     public var id: String { deviceId }
 }
 

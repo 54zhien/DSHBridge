@@ -22,7 +22,9 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
 
     private var progress: CGFloat = 0
     private var baseline: CGFloat = 0
-    private var animator: UIViewPropertyAnimator?
+    private var settleTarget: CGFloat = 0
+    private var displayLink: CADisplayLink?
+    private var settleVelocity: CGFloat = 0
     private var isOpen = false
 
     var onOpenChanged: ((Bool) -> Void)?
@@ -133,11 +135,11 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
         let translation = gesture.translation(in: view).x
         switch gesture.state {
         case .began:
-            animator?.stopAnimation(true)
-            animator = nil
+            displayLink?.invalidate()
+            displayLink = nil
+            settleVelocity = 0
             baseline = progress
         case .changed:
-            guard abs(gesture.velocity(in: view).x) > 1 || abs(translation) > 2 else { return }
             progress = clamp(baseline + translation / metrics.width)
             apply(progress: progress)
         case .ended, .cancelled, .failed:
@@ -155,24 +157,43 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
     }
 
     private func animate(to target: CGFloat, velocity: CGFloat) {
-        animator?.stopAnimation(true)
-        let spring = UISpringTimingParameters(dampingRatio: 0.88, initialVelocity: CGVector(dx: velocity, dy: 0))
-        let animator = UIViewPropertyAnimator(duration: 0.36, timingParameters: spring)
-        animator.addAnimations { [weak self] in
-            self?.apply(progress: target)
+        displayLink?.invalidate()
+        settleTarget = target
+        settleVelocity = velocity
+        let link = CADisplayLink(target: self, selector: #selector(stepSpring(_:)))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    /// 自己积分弹簧。UIViewPropertyAnimator 只能动 UIView 的可动画属性，
+    /// 而我们写的全是 CALayer 的 cornerRadius/shadow，且外面还关掉了隐式动画，
+    /// 交给它只会瞬间跳变，看起来就像卡在半路。
+    @objc private func stepSpring(_ link: CADisplayLink) {
+        let dt = CGFloat(min(1.0 / 30.0, max(1.0 / 240.0, link.targetTimestamp - link.timestamp)))
+        let stiffness: CGFloat = 220
+        let damping: CGFloat = 26
+        let displacement = progress - settleTarget
+        settleVelocity += (-stiffness * displacement - damping * settleVelocity) * dt
+        var next = progress + settleVelocity * dt
+        if abs(next - settleTarget) < 0.002, abs(settleVelocity) < 0.05 {
+            link.invalidate()
+            displayLink = nil
+            settleVelocity = 0
+            progress = settleTarget
+            apply(progress: settleTarget)
+            finish(target: settleTarget)
+            return
         }
-        animator.addCompletion { [weak self] _ in
-            guard let self else { return }
-            self.progress = target
-            self.animator = nil
-            let open = target > 0.5
-            if open != self.isOpen {
-                self.isOpen = open
-                self.onOpenChanged?(open)
-            }
-        }
-        self.animator = animator
-        animator.startAnimation()
+        next = clamp(next)
+        progress = next
+        apply(progress: next)
+    }
+
+    private func finish(target: CGFloat) {
+        let open = target > 0.5
+        guard open != isOpen else { return }
+        isOpen = open
+        onOpenChanged?(open)
     }
 
     /// 唯一真源：所有几何量都由 progress 派生，同一帧内一次性写入。
