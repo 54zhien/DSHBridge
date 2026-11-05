@@ -466,9 +466,45 @@ public actor RemoteLink {
             if let continuation = pendingRpc.removeValue(forKey: id) {
                 continuation.resume(returning: message)
             }
+        case "event":
+            guard let eventPayload = envelope["payload"] as? [String: Any] else { return }
+            let name = eventPayload["event"] as? String ?? ""
+            let data = eventPayload["data"] as? [String: Any] ?? [:]
+            let streamId = data["streamId"] as? String ?? ""
+            guard let continuation = streamContinuations[streamId] else { return }
+            if name.hasSuffix("frame"), let value = data["value"] {
+                if let bytes = try? JSONSerialization.data(withJSONObject: value) {
+                    continuation.yield(bytes)
+                }
+            } else if name.hasSuffix("stream.closed") {
+                continuation.finish()
+                streamContinuations[streamId] = nil
+            }
         default:
             note("event \(messageType)")
         }
+    }
+
+    // MARK: - 流
+
+    private var streamContinuations: [String: AsyncStream<Data>.Continuation] = [:]
+
+    /// 打开 Host 上的远程流，返回只吐 frame value 的 AsyncStream。
+    public func openStream(endpoint: String, payloadJSON: Data) async throws -> AsyncStream<Data> {
+        let streamId = UUID().uuidString
+        let (stream, continuation) = AsyncStream<Data>.makeStream()
+        streamContinuations[streamId] = continuation
+        let payload: Any = (try? JSONSerialization.jsonObject(with: payloadJSON)) ?? [:]
+        let params: [String: Any] = ["streamId": streamId, "endpoint": endpoint, "payload": payload]
+        let body = try JSONSerialization.data(withJSONObject: params)
+        do {
+            _ = try await rpc("harness.remote.stream.open", paramsJSON: body)
+        } catch {
+            streamContinuations[streamId] = nil
+            continuation.finish()
+            throw error
+        }
+        return stream
     }
 
     public func close() {

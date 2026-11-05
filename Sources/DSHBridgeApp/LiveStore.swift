@@ -66,21 +66,58 @@ final class LiveStore {
         guard let link else { return }
         activeSessionId = sessionId
         messages = []
+        lastError = nil
         let body: [String: Any] = [
             "request": [
                 "address": ["kind": "session", "sessionId": sessionId],
-                "throughSeq": 0,
-                "beforeSeq": 0,
                 "maxMessages": 80,
             ],
         ]
         guard let payload = try? JSONSerialization.data(withJSONObject: body) else { return }
         do {
-            let data = try await link.remoteCall(endpoint: "session/page", payloadJSON: payload)
-            messages = Self.decodeMessages(data)
+            let stream = try await link.openStream(endpoint: "session/follow", payloadJSON: payload)
+            var frames: [Data] = []
+            let deadline = Date().addingTimeInterval(2.5)
+            for await frame in stream {
+                frames.append(frame)
+                if Date() > deadline { break }
+            }
+            messages = Self.decodeFrames(frames)
+            if messages.isEmpty {
+                lastError = "会话流已连上，但没有解析出消息（收到 \(frames.count) 帧）"
+            }
         } catch {
             lastError = AuthStore.describe(error)
         }
+    }
+
+    /// 会话流每一帧是一个快照：{ records: [{ event: { type, seq, time, data }, view }] }
+    private static func decodeFrames(_ frames: [Data]) -> [ChatMessage] {
+        var out: [ChatMessage] = []
+        for frame in frames {
+            guard let object = try? JSONSerialization.jsonObject(with: frame) as? [String: Any] else { continue }
+            let records = object["records"] as? [[String: Any]] ?? []
+            for record in records {
+                guard let event = record["event"] as? [String: Any] else { continue }
+                let type = event["type"] as? String ?? ""
+                let data = event["data"] as? [String: Any] ?? [:]
+                guard let text = Self.text(in: data), !text.isEmpty else { continue }
+                let role: MessageRole = (data["role"] as? String) == "user" || type.contains("user") ? .user : .assistant
+                out.append(ChatMessage(id: UUID(), role: role, text: text, isStreaming: false))
+            }
+        }
+        return out
+    }
+
+    private static func text(in data: [String: Any]) -> String? {
+        if let value = data["text"] as? String { return value }
+        if let value = data["content"] as? String { return value }
+        if let parts = data["content"] as? [[String: Any]] {
+            let joined = parts.compactMap { $0["text"] as? String }.joined()
+            if !joined.isEmpty { return joined }
+        }
+        if let message = data["message"] as? [String: Any], let value = message["text"] as? String { return value }
+        return nil
     }
 
     func send(_ text: String) async {
