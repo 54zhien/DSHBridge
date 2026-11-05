@@ -40,6 +40,8 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
     required init?(coder: NSCoder) { fatalError() }
 
     override func viewDidLoad() {
+        // 系统边缘返回手势和抽屉抢同一段横向滑动，展开一半被接管就会卡住
+        navigationController?.interactivePopGestureRecognizer?.isEnabled = false
         super.viewDidLoad()
         view.backgroundColor = UIColor(DSTheme.canvas)
 
@@ -235,6 +237,11 @@ final class DrawerHostController<Sidebar: View, Content: View>: UIViewController
             return value
         }
         return 48
+    }
+
+    nonisolated func gestureRecognizer(_ g: UIGestureRecognizer,
+                                       shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
     }
 
     nonisolated func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
