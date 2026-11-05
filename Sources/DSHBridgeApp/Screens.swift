@@ -140,11 +140,10 @@ struct ChatScreen: View {
                                 .font(.system(.caption2, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        }
                     }
                     .padding()
                 }
-                .navigationTitle("会话帧 (live.debugFrames.count)")
+                .navigationTitle("会话帧 " + String(live.debugFrames.count))
             }
         }
         .navigationBarTitleDisplayMode(.inline)
